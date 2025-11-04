@@ -26,6 +26,9 @@ import com.example.lab_week_09.ui.theme.LAB_WEEK_09Theme
 import com.example.lab_week_09.ui.theme.OnBackgroundItemText
 import com.example.lab_week_09.ui.theme.OnBackgroundTitleText
 import com.example.lab_week_09.ui.theme.PrimaryTextButton
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,61 +40,36 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
-                    App(
-                        navController = navController
-                    )
+                    App(navController = navController)
                 }
             }
         }
     }
 }
 
-//Declare a data class called Student
 data class Student(
     var name: String
 )
 
-//Here, we create a composable function called App
-//This will be the root composable of the app
 @Composable
 fun App(navController: NavHostController) {
-    //Here, we use NavHost to create a navigation graph
-    //We pass the navController as a parameter
-    //We also set the startDestination to "home"
-    //This means that the app will start with the Home composable
     NavHost(
         navController = navController,
         startDestination = "home"
     ) {
-        //Here, we create a route called "home"
-        //We pass the Home composable as a parameter
-        //This means that when the app navigates to "home",
-        //the Home composable will be displayed
         composable("home") {
-            //Here, we pass a lambda function that navigates to "resultContent"
-            //and pass the listData as a parameter
-            Home { navController.navigate(
-                "resultContent/?listData=$it")
+            Home { listDataJson ->
+                navController.navigate("resultContent/?listData=$listDataJson")
             }
         }
-        //Here, we create a route called "resultContent"
-        //We pass the ResultContent composable as a parameter
-        //This means that when the app navigates to "resultContent",
-        //the ResultContent composable will be displayed
-        //You can also define arguments for the route
-        //Here, we define a String argument called "listData"
-        //We use navArgument to define the argument
-        //We use NavType.StringType to define the type of the argument
+
         composable(
             "resultContent/?listData={listData}",
-            arguments = listOf(navArgument("listData") {
-                type = NavType.StringType }
+            arguments = listOf(
+                navArgument("listData") { type = NavType.StringType }
             )
         ) {
-            //Here, we pass the value of the argument to the ResultContent composable
-            ResultContent(
-                it.arguments?.getString("listData").orEmpty()
-            )
+            ResultContent(it.arguments?.getString("listData").orEmpty())
         }
     }
 }
@@ -100,22 +78,38 @@ fun App(navController: NavHostController) {
 fun Home(
     navigateFromHomeToResult: (String) -> Unit
 ) {
-    val listData = remember { mutableStateListOf(
-        Student("Tanu"),
-        Student("Tina"),
-        Student("Tono")
-    )}
+    val listData = remember {
+        mutableStateListOf(
+            Student("Tanu"),
+            Student("Tina"),
+            Student("Tono")
+        )
+    }
     var inputField by remember { mutableStateOf(Student("")) }
+
+    // instance for bonus part
+    val moshi = Moshi.Builder()
+        .add(KotlinJsonAdapterFactory())
+        .build()
+    val type = Types.newParameterizedType(List::class.java, Student::class.java)
+    val adapter = moshi.adapter<List<Student>>(type)
 
     HomeContent(
         listData,
         inputField,
         { input -> inputField = inputField.copy(input) },
         {
-            listData.add(inputField)
-            inputField = inputField.copy("")
+            // tugasv prevent empty name
+            if (inputField.name.isNotBlank()) {
+                listData.add(inputField)
+                inputField = inputField.copy("")
+            }
         },
-        { navigateFromHomeToResult(listData.toList().toString()) }
+        {
+            // convert listData to JSON
+            val listDataJson = adapter.toJson(listData)
+            navigateFromHomeToResult(listDataJson)
+        }
     )
 }
 
@@ -135,8 +129,8 @@ fun HomeContent(
                     .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                OnBackgroundTitleText(text = stringResource(
-                    id = R.string.enter_item)
+                OnBackgroundTitleText(
+                    text = stringResource(id = R.string.enter_item)
                 )
 
                 TextField(
@@ -144,16 +138,19 @@ fun HomeContent(
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text
                     ),
-                    onValueChange = {
-                        onInputValueChange(it)
-                    }
+                    onValueChange = { onInputValueChange(it) }
                 )
 
                 Row {
-                    PrimaryTextButton(text = stringResource(id = R.string.button_click)) {
+                    PrimaryTextButton(
+                        text = stringResource(id = R.string.button_click)
+                    ) {
                         onButtonClick()
                     }
-                    PrimaryTextButton(text = stringResource(id = R.string.button_navigate)) {
+
+                    PrimaryTextButton(
+                        text = stringResource(id = R.string.button_navigate)
+                    ) {
                         navigateFromHomeToResult()
                     }
                 }
@@ -173,17 +170,32 @@ fun HomeContent(
     }
 }
 
-//Here, we create a composable function called ResultContent
-//ResultContent accepts a String parameter called listData from the Home composable
-//then displays the value of listData to the screen
+//Display parsed JSON in readable list format
 @Composable
 fun ResultContent(listData: String) {
+    //Parse JSON string back to list using Moshi
+    val moshi = Moshi.Builder()
+        .add(KotlinJsonAdapterFactory())
+        .build()
+    val type = Types.newParameterizedType(List::class.java, Student::class.java)
+    val adapter = moshi.adapter<List<Student>>(type)
+
+    val parsedList = try {
+        adapter.fromJson(listData)
+    } catch (e: Exception) {
+        emptyList()
+    }
+
     Column(
         modifier = Modifier
             .padding(vertical = 4.dp)
             .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        OnBackgroundItemText(text = listData)
+        OnBackgroundTitleText(text = "Result List:")
+
+        parsedList?.forEach { student ->
+            OnBackgroundItemText(text = student.name)
+        }
     }
 }
